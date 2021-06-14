@@ -1,7 +1,31 @@
 {
     "AWSTemplateFormatVersion": "2010-09-09",
     "Description": "Basic VPC deployment with two public subnets in two different Availability Zones",
-    "Parameters": {},
+    "Parameters": {
+        "PeerName": {
+            "Type": "String",
+            "Description": "Name of peering connection"
+        },
+        "PeerOwnerId": {
+            "Type": "String",
+            "Description": "Account ID for the target VPC",
+            "AllowedPattern": "^\\d{12}$"
+        },
+        "PeerVPCID": {
+            "Type": "String",
+            "Description": "ID of the VPC with which you are creating the VPC peering connection",
+            "AllowedPattern": "^vpc-[0-9a-f]{17}$"
+        },
+        "PeerVPCCIDR": {
+            "Type": "String",
+            "AllowedPattern": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/(1[6-9]|2[0-8]))$",
+            "Description": "CIDR of the VPC Peer"
+        },
+        "ImageId": {
+            "Type": "String",
+            "Description": "Image ID of current Amazon Linux 2 image in the region"
+        }
+    },
     "Resources": {
         "VPC": {
             "Type": "AWS::EC2::VPC",
@@ -196,6 +220,35 @@
                 }
             }
         },
+        "VPCPeeringConnection": {
+            "Type": "AWS::EC2::VPCPeeringConnection",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "PeerVpcId": {
+                    "Ref": "PeerVPCID"
+                },
+                "PeerOwnerId": {
+                    "Ref": "PeerOwnerId"
+                }
+            }
+        },
+        "PeeringRoute": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "VPCPeeringConnection",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable"
+                },
+                "DestinationCidrBlock": {
+                    "Ref": "PeerVPCCIDR"
+                },
+                "VpcPeeringConnectionId": {
+                    "Ref": "VPCPeeringConnection"
+                }
+            }
+        },
         "PublicSubnetRouteTableAssociation1": {
             "Type": "AWS::EC2::SubnetRouteTableAssociation",
             "Properties": {
@@ -295,6 +348,53 @@
                 "NetworkAclId": {
                     "Ref": "PublicNetworkAcl"
                 }
+            }
+        },
+        "EC2SecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "ssh-instance",
+                "GroupName": "SSH Instance",
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "Description": "Allow SSH from Anywhere",
+                        "FromPort": 22,
+                        "ToPort": 22,
+                        "IpProtocol": "tcp"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "EC2Instance": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "ImageId": {
+                    "Ref": "ImageId"
+                },
+                "InstanceType": "t2.micro",
+                "KeyName": "Peering",
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "EC2SecurityGroup"
+                    }
+                ],
+                "SubnetId": {
+                    "Ref": "PublicSubnet1"
+                },
+                "Tags": [
+                    {
+                        "Key": "Company",
+                        "Value": "Globomantics"
+                    },
+                    {
+                        "Key": "Name",
+                        "Value": "vpc2-peering"
+                    }
+                ]
             }
         }
     },
