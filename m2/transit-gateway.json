@@ -1,0 +1,1111 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Creates a transit gateway two VPCs each with two private subnets and routes for each subnet to the TGW. A security group permitting all traffic to/from the MgmtVPC is created and an SG that permits inbound traffic from MgmtVPC to App1VPC is also created. MgmtVPC would have all of the necessary monitoring and management tools. App1VPC is a model of just one of many possible App1VPC  Alex Neihaus 2019-08-17 (c) 2019 Air11 Technology LLC -- licensed under the Apache OpenSource 2.0 license, https://opensource.org/licenses/Apache-2.0",
+    "Metadata": {
+        "AWS::CloudFormation::Interface": {
+            "ParameterGroups": [
+                {
+                    "Label": {
+                        "default": "VPC and Transit Gateway configuration parameters"
+                    },
+                    "Parameters": [
+                        "MgmtVPCCIDR",
+                        "MgmtVPCSubnet1CIDR",
+                        "MgmtVPCSubnet2CIDR",
+                        "App1VPCCIDR",
+                        "App1VPCSubnet1CIDR",
+                        "App1VPCSubnet2CIDR",
+                        "TransitGatewayASN",
+                        "TransitGatewayRoute",
+                        "ImageId",
+                        "KeyName"
+                    ]
+                }
+            ],
+            "ParameterLabels": {
+                "TransitGatewayRoute": {
+                    "default": "Enter the CIDR that contains ALL VPCs that can be routed through the Transit Gateway (probably a /16)"
+                },
+                "TransitGatewayASN": {
+                    "default": "Enter the ASN of the transit gateway"
+                },
+                "MgmtVPCCIDR": {
+                    "default": "Enter CIDR of management VPC"
+                },
+                "MgmtVPCSubnet1CIDR": {
+                    "default": "Enter CIDR of the first private subnet in the management VPC"
+                },
+                "MgmtVPCSubnet2CIDR": {
+                    "default": "Enter CIDR of the second private subnet in the management VPC"
+                },
+                "App1VPCCIDR": {
+                    "default": "Enter the CIDR of the App1 VPC"
+                },
+                "App1VPCSubnet1CIDR": {
+                    "default": "Enter the CIDR of the first private subnet in the App1 VPC"
+                },
+                "App1VPCSubnet2CIDR": {
+                    "default": "Enter the CIDR of the second private subnet in the App1 VPC"
+                },
+                "ImageId": {
+                    "default": "Enter the image ID for the instances running in the management and App1 VPCs"
+                },
+                "KeyName": {
+                    "default": "Enter the Key Name for the instances running in the management and App1 VPCs"
+                }
+            }
+        }
+    },
+    "Parameters": {
+        "TransitGatewayRoute": {
+            "AllowedPattern": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(1[6-9]|2[0-8]))$",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Default": "10.10.0.0/16",
+            "Description": "CIDR block for address range that contains ALL VPCs.",
+            "Type": "String"
+        },
+        "MgmtVPCCIDR": {
+            "AllowedPattern": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(1[6-9]|2[0-8]))$",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Default": "10.10.0.0/17",
+            "Description": "CIDR block for Management VPC",
+            "Type": "String"
+        },
+        "App1VPCCIDR": {
+            "AllowedPattern": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(1[6-9]|2[0-8]))$",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Default": "10.10.128.0/17",
+            "Description": "CIDR block for App1 VPC",
+            "Type": "String"
+        },
+        "MgmtVPCSubnet1CIDR": {
+            "AllowedPattern": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(1[6-9]|2[0-8]))$",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Default": "10.10.0.0/24",
+            "Description": "CIDR block for the first mangagement VPC subnet",
+            "Type": "String"
+        },
+        "MgmtVPCSubnet2CIDR": {
+            "AllowedPattern": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(1[6-9]|2[0-8]))$",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Default": "10.10.1.0/24",
+            "Description": "CIDR block for the second mangagement VPC subnet",
+            "Type": "String"
+        },
+        "App1VPCSubnet1CIDR": {
+            "AllowedPattern": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(1[6-9]|2[0-8]))$",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Default": "10.10.128.0/24",
+            "Description": "CIDR block for the first private subnet in the App1 VPC",
+            "Type": "String"
+        },
+        "App1VPCSubnet2CIDR": {
+            "AllowedPattern": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(1[6-9]|2[0-8]))$",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Default": "10.10.129.0/24",
+            "Description": "CIDR block for the second private subnet in the App1 VPC",
+            "Type": "String"
+        },
+        "TransitGatewayASN": {
+            "Default": "64612",
+            "ConstraintDescription": "Must be an integer between 64512 and 65534",
+            "Description": "The ASN for the AWS Transit Gateway",
+            "Type": "Number",
+            "MinValue": "64512",
+            "MaxValue": "65534"
+        },
+        "ImageId": {
+            "Type": "String",
+            "Description": "Image ID of current Amazon Linux 2 image in the region"
+        },
+        "KeyName": {
+            "Type": "String",
+            "Description": "Key Name for instances"
+        }
+    },
+    "Mappings": {},
+    "Resources": {
+        "TransitGateway": {
+            "Type": "AWS::EC2::TransitGateway",
+            "Properties": {
+                "AmazonSideAsn": {
+                    "Ref": "TransitGatewayASN"
+                },
+                "Description": "VPC transit gateway",
+                "AutoAcceptSharedAttachments": "enable",
+                "DefaultRouteTableAssociation": "enable",
+                "DnsSupport": "enable",
+                "VpnEcmpSupport": "enable",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "TransitGateway-",
+                                    {
+                                        "Ref": "TransitGatewayASN"
+                                    }
+                                ]
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "TransitGatewayRouteTable1": {
+            "Type" : "AWS::EC2::TransitGatewayRouteTable",
+            "Properties" : {
+                "Tags" : [ 
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        } 
+                    }
+                ],
+                "TransitGatewayId" : {
+                    "Ref": "TransitGateway"
+                }
+              }
+          },
+          
+        "MgmtVPC": {
+            "Type": "AWS::EC2::VPC",
+            "Properties": {
+                "EnableDnsSupport": "true",
+                "EnableDnsHostnames": "true",
+                "CidrBlock": {
+                    "Ref": "MgmtVPCCIDR"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "MgmtVPC-",
+                                    {
+                                        "Ref": "MgmtVPCCIDR"
+                                    }
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            },
+            "DependsOn": "TransitGateway"
+        },
+        "MgmtInternetGateway": {
+            "Type": "AWS::EC2::InternetGateway",
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "MgmtGatewayToInternet": {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "MgmtVPC"
+                },
+                "InternetGatewayId": {
+                    "Ref": "MgmtInternetGateway"
+                }
+            }
+        },
+        "MgmtVPCTGWAttachment": {
+            "Type": "AWS::EC2::TransitGatewayAttachment",
+            "Properties": {
+                "SubnetIds": [
+                    {
+                        "Ref": "MgmtVPCSubnet1"
+                    },
+                    {
+                        "Ref": "MgmtVPCSubnet2"
+                    }
+                ],
+                "TransitGatewayId": {
+                    "Ref": "TransitGateway"
+                },
+                "VpcId": {
+                    "Ref": "MgmtVPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "MgmtVPCAttachment-",
+                                    {
+                                        "Ref": "MgmtVPCCIDR"
+                                    }
+                                ]
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "MgmtVPCSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "MgmtVPC"
+                },
+                "CidrBlock": {
+                    "Ref": "MgmtVPCSubnet1CIDR"
+                },
+                "MapPublicIpOnLaunch": true,
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        "1",
+                        {
+                            "Fn::GetAZs": ""
+                        }
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "MgmtVPCSubnet1-",
+                                    {
+                                        "Ref": "MgmtVPCSubnet1CIDR"
+                                    }
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "MgmtVPCSubnet1RouteTable": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "MgmtVPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "MgmtVPCSubnet1RouteTable-",
+                                    {
+                                        "Ref": "MgmtVPCSubnet1CIDR"
+                                    }
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "MgmtVPCSubnet1TGWRoute": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "MgmtVPCTGWAttachment",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "MgmtVPCSubnet1RouteTable"
+                },
+                "DestinationCidrBlock": {
+                    "Ref": "TransitGatewayRoute"
+                },
+                "TransitGatewayId": {
+                    "Ref": "TransitGateway"
+                }
+            }
+        },
+        "MgmtVPCSubnet1PublicRoute": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "MgmtGatewayToInternet",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "MgmtVPCSubnet1RouteTable"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "MgmtInternetGateway"
+                }
+            }
+        },
+        "MgmtSubnet1RouteTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "MgmtVPCSubnet1"
+                },
+                "RouteTableId": {
+                    "Ref": "MgmtVPCSubnet1RouteTable"
+                }
+            }
+        },
+        "MgmtVPCSubnet2": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "MgmtVPC"
+                },
+                "CidrBlock": {
+                    "Ref": "MgmtVPCSubnet2CIDR"
+                },
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        "2",
+                        {
+                            "Fn::GetAZs": ""
+                        }
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "MgmtVPCSubnet2-",
+                                    {
+                                        "Ref": "MgmtVPCSubnet2CIDR"
+                                    }
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "MgmtVPCSubnet2RouteTable": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "MgmtVPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "MgmtVPCSubnet2RouteTable-",
+                                    {
+                                        "Ref": "MgmtVPCSubnet2CIDR"
+                                    }
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "MgmtVPCSubnet2TGWRoute": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "MgmtVPCTGWAttachment",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "MgmtVPCSubnet2RouteTable"
+                },
+                "DestinationCidrBlock": {
+                    "Ref": "TransitGatewayRoute"
+                },
+                "TransitGatewayId": {
+                    "Ref": "TransitGateway"
+                }
+            }
+        },
+        "MgmtVPCSubnet2PublicRoute": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "MgmtGatewayToInternet",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "MgmtVPCSubnet2RouteTable"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "MgmtInternetGateway"
+                }
+            }
+        },
+        "MgmtSubnet2RouteTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "MgmtVPCSubnet2"
+                },
+                "RouteTableId": {
+                    "Ref": "MgmtVPCSubnet2RouteTable"
+                }
+            }
+        },
+        "MgmtVPCSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "MgmtVPC"
+                },
+                "GroupDescription": "Allow all traffic to TGW-connected VPCs",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "0",
+                        "ToPort": "1024",
+                        "CidrIp": {
+                            "Ref": "TransitGatewayRoute"
+                        }
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "0",
+                        "ToPort": "1024",
+                        "CidrIp": {
+                            "Ref": "TransitGatewayRoute"
+                        }
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "MgmtVPCSecurityGroup-",
+                                    {
+                                        "Ref": "MgmtVPC"
+                                    }
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "MgmtEC2SecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "ssh-instance",
+                "GroupName": "SSH Instance",
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "Description": "Allow SSH from Anywhere",
+                        "FromPort": 22,
+                        "ToPort": 22,
+                        "IpProtocol": "tcp"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "MgmtVPC"
+                }
+            }
+        },
+        "MgmtEC2Instance": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "ImageId": {
+                    "Ref": "ImageId"
+                },
+                "InstanceType": "t2.micro",
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "MgmtEC2SecurityGroup"
+                    }
+                ],
+                "SubnetId": {
+                    "Ref": "MgmtVPCSubnet1"
+                },
+                "Tags": [
+                    {
+                        "Key": "Company",
+                        "Value": "Globomantics"
+                    },
+                    {
+                        "Key": "Name",
+                        "Value": "mgmt-transit-test"
+                    }
+                ]
+            }
+        },
+        "App1VPC": {
+            "Type": "AWS::EC2::VPC",
+            "DependsOn": "TransitGateway",
+            "Properties": {
+                "EnableDnsSupport": "true",
+                "EnableDnsHostnames": "true",
+                "CidrBlock": {
+                    "Ref": "App1VPCCIDR"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "App1VPC-",
+                                    {
+                                        "Ref": "App1VPCCIDR"
+                                    }
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "App1InternetGateway": {
+            "Type": "AWS::EC2::InternetGateway",
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "App1GatewayToInternet": {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "App1VPC"
+                },
+                "InternetGatewayId": {
+                    "Ref": "App1InternetGateway"
+                }
+            }
+        },
+        "App1VPCTGWAttachment": {
+            "Type": "AWS::EC2::TransitGatewayAttachment",
+            "Properties": {
+                "SubnetIds": [
+                    {
+                        "Ref": "App1VPCSubnet1"
+                    },
+                    {
+                        "Ref": "App1VPCSubnet2"
+                    }
+                ],
+                "TransitGatewayId": {
+                    "Ref": "TransitGateway"
+                },
+                "VpcId": {
+                    "Ref": "App1VPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "App1Attachment-",
+                                    {
+                                        "Ref": "App1VPCCIDR"
+                                    }
+                                ]
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "App1TransitGatewayRouteTableAssociation": {
+            "Type" : "AWS::EC2::TransitGatewayRouteTableAssociation",
+            "Properties" : {
+                "TransitGatewayAttachmentId" : {
+                    "Ref": "App1VPCTGWAttachment"
+                },
+                "TransitGatewayRouteTableId" : {
+                    "Ref": "TransitGatewayRouteTable1"
+                }
+              }
+          },
+          "App1TransitGatewayRouteTablePropogation": {
+            "Type" : "AWS::EC2::TransitGatewayRouteTablePropagation",
+            "Properties" : {
+                "TransitGatewayAttachmentId" : {
+                    "Ref": "App1VPCTGWAttachment"
+                },
+                "TransitGatewayRouteTableId" : {
+                    "Ref": "TransitGatewayRouteTable1"
+                }
+              }
+          },
+        "App1VPCSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "App1VPC"
+                },
+                "CidrBlock": {
+                    "Ref": "App1VPCSubnet1CIDR"
+                },
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        "2",
+                        {
+                            "Fn::GetAZs": ""
+                        }
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "App1VPCSubnet1-",
+                                    {
+                                        "Ref": "App1VPCSubnet1CIDR"
+                                    }
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "App1VPCSubnet1RouteTable": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "App1VPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "App1VPCSubnet1RouteTable-",
+                                    {
+                                        "Ref": "App1VPCSubnet1CIDR"
+                                    }
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "App1VPCSubnet1TGWRoute": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "App1VPCTGWAttachment",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "App1VPCSubnet1RouteTable"
+                },
+                "DestinationCidrBlock": {
+                    "Ref": "MgmtVPCSubnet1CIDR"
+                },
+                "TransitGatewayId": {
+                    "Ref": "TransitGateway"
+                }
+            }
+        },
+        "App1VPCSubnet1PublicRoute": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "App1GatewayToInternet",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "App1VPCSubnet1RouteTable"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "App1InternetGateway"
+                }
+            }
+        },
+        "App1Subnet1RouteTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "App1VPCSubnet1"
+                },
+                "RouteTableId": {
+                    "Ref": "App1VPCSubnet1RouteTable"
+                }
+            }
+        },
+        "App1VPCSubnet2": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "App1VPC"
+                },
+                "CidrBlock": {
+                    "Ref": "App1VPCSubnet2CIDR"
+                },
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        "0",
+                        {
+                            "Fn::GetAZs": ""
+                        }
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "App1VPCSubnet2-",
+                                    {
+                                        "Ref": "App1VPCSubnet2CIDR"
+                                    }
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "App1VPCSubnet2RouteTable": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "App1VPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "App1VPCSubnet2RouteTable-",
+                                    {
+                                        "Ref": "App1VPCSubnet2CIDR"
+                                    }
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "App1VPCSubnet2TGWRoute": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "App1VPCTGWAttachment",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "App1VPCSubnet2RouteTable"
+                },
+                "DestinationCidrBlock": {
+                    "Ref": "MgmtVPCSubnet1CIDR"
+                },
+                "TransitGatewayId": {
+                    "Ref": "TransitGateway"
+                }
+            }
+        },
+        "App1VPCSubnet2PublicRoute": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "App1GatewayToInternet",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "App1VPCSubnet2RouteTable"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "App1InternetGateway"
+                }
+            }
+        },
+        "App1Subnet2RouteTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "App1VPCSubnet2"
+                },
+                "RouteTableId": {
+                    "Ref": "App1VPCSubnet2RouteTable"
+                }
+            }
+        },
+        "App1VPCSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "App1VPC"
+                },
+                "GroupDescription": "Allow all traffic to MgmtVPC",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "0",
+                        "ToPort": "1024",
+                        "CidrIp": {
+                            "Ref": "MgmtVPCCIDR"
+                        }
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "0",
+                        "ToPort": "1024",
+                        "CidrIp": {
+                            "Ref": "MgmtVPCCIDR"
+                        }
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "App1VPCSecurityGroup-",
+                                    {
+                                        "Ref": "App1VPC"
+                                    }
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "App1EC2SecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "ssh-instance",
+                "GroupName": "SSH Instance",
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "Description": "Allow SSH from Anywhere",
+                        "FromPort": 22,
+                        "ToPort": 22,
+                        "IpProtocol": "tcp"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "App1VPC"
+                }
+            }
+        },
+        "App1EC2Instance": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "ImageId": {
+                    "Ref": "ImageId"
+                },
+                "InstanceType": "t2.micro",
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "App1EC2SecurityGroup"
+                    }
+                ],
+                "SubnetId": {
+                    "Ref": "App1VPCSubnet1"
+                },
+                "Tags": [
+                    {
+                        "Key": "Company",
+                        "Value": "Globomantics"
+                    },
+                    {
+                        "Key": "Name",
+                        "Value": "app1-transit-test"
+                    }
+                ]
+            }
+        }
+    },
+    "Outputs": {
+        "TransitGateway": {
+            "Description": "Transit Gateway",
+            "Value": {
+                "Ref": "TransitGateway"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-TransitGateway"
+                }
+            }
+        },
+        "MgmtVPCTGWAttachment": {
+            "Description": "Attachment ID of management VPC to Transit Gateway",
+            "Value": {
+                "Ref": "MgmtVPCTGWAttachment"
+            }
+        },
+        "MgmtVPCID": {
+            "Description": "VPCID of the management VPC",
+            "Value": {
+                "Ref": "MgmtVPC"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-MgmtVPC"
+                }
+            }
+        },
+        "MgmtVPCSubnet1": {
+            "Description": "SubnetId of the first subnet in the management VPC",
+            "Value": {
+                "Ref": "MgmtVPCSubnet1"
+            }
+        },
+        "MgmtVPCSubnet1RouteTable": {
+            "Description": "Route table ID of the first subnet in the management VPC",
+            "Value": {
+                "Ref": "MgmtVPCSubnet1RouteTable"
+            }
+        },
+        "MgmtVPCSubnet2": {
+            "Description": "SubnetId of the second subnet in the management VPC",
+            "Value": {
+                "Ref": "MgmtVPCSubnet2"
+            }
+        },
+        "MgmtVPCSubnet2RouteTable": {
+            "Description": "Route table ID of the second subnet in the management VPC",
+            "Value": {
+                "Ref": "MgmtVPCSubnet2RouteTable"
+            }
+        },
+        "App1VPCID": {
+            "Description": "VPCID of the App1 VPC",
+            "Value": {
+                "Ref": "App1VPC"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-App1VPC"
+                }
+            }
+        },
+        "App1VPCSubnet1": {
+            "Description": "SubnetId of the first subnet in the App1 VPC",
+            "Value": {
+                "Ref": "App1VPCSubnet1"
+            }
+        },
+        "App1VPCSubnet1RouteTable": {
+            "Description": "Route table ID of the first subnet in the App1 VPC",
+            "Value": {
+                "Ref": "App1VPCSubnet1RouteTable"
+            }
+        },
+        "App1VPCSubnet2": {
+            "Description": "SubnetId of the second subnet in the App1 VPC",
+            "Value": {
+                "Ref": "App1VPCSubnet2"
+            }
+        },
+        "App1VPCSubnet2RouteTable": {
+            "Description": "Route table ID of the second subnet in the App1 VPC",
+            "Value": {
+                "Ref": "App1VPCSubnet2RouteTable"
+            }
+        }
+    }
+}
