@@ -1,8 +1,4 @@
-# Have AWS CLI already install
-# Have Access Key and Secret Key ready
 # Recommend using us-east-1 by default
-aws configure
-
 region=us-east-1
 
 export AWS_DEFAULT_REGION=$region

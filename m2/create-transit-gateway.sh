@@ -1,3 +1,6 @@
+# Make sure to run the create-peering steps first
+# You're going to need the EC2 key and AMI ID
+
 # Deploy our transit gateway setup
 
 aws cloudformation create-stack --stack-name TransitGateway \
@@ -17,3 +20,5 @@ aws ec2 describe-instances --filters Name="tag:Name",Values="app1-transit-test" 
 # Connect via SSH
 
 ssh ec2-user@$public_ip_address -i ~/.ssh/Peering.pem
+
+# Now try to connect to the app server using SSH
